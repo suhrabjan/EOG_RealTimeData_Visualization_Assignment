@@ -1,6 +1,6 @@
-import { takeEvery, call, put, cancel, all } from "redux-saga/effects";
-import API from "../api";
-import * as actions from "../actions";
+import { takeEvery, call, put, cancel, all } from 'redux-saga/effects';
+import API from '../api';
+import * as actions from '../actions';
 
 /*
   1. The weather service requires us to make a search by lat/lng to find its
@@ -17,8 +17,25 @@ import * as actions from "../actions";
 
 */
 
+const determineDroneLatAndLong = async () => {
+  const response = await fetch(
+    'https://react-assessment-api.herokuapp.com/api/drone'
+  );
+  if (!response.ok) {
+    return { error: { code: response.status } };
+  }
+  const json = await response.json();
+  let l = json.data.length - 1;
+  return {
+    metric: json.data[l].metric,
+    latitude: json.data[l].latitude,
+    longitude: json.data[l].longitude,
+    metricsData: json.data
+  };
+};
+
 function* watchWeatherIdReceived(action) {
-  const { id } = action;
+  const { id } = action.payload;
   const { error, data } = yield call(API.findWeatherbyId, id);
   if (error) {
     yield put({ type: actions.API_ERROR, code: error.code });
@@ -29,7 +46,15 @@ function* watchWeatherIdReceived(action) {
 }
 
 function* watchFetchWeather(action) {
-  const { latitude, longitude } = action;
+  const { error1, latitude, longitude, metric, metricsData } = yield call(
+    determineDroneLatAndLong
+  );
+  if (error1) {
+    console.log({ error1 });
+    yield put({ type: actions.API_ERROR, code: error1.code });
+    yield cancel();
+    return;
+  }
   const { error, data } = yield call(
     API.findLocationByLatLng,
     latitude,
@@ -47,7 +72,10 @@ function* watchFetchWeather(action) {
     yield cancel();
     return;
   }
-  yield put({ type: actions.WEATHER_ID_RECEIVED, id: location });
+  yield put({
+    type: actions.WEATHER_ID_RECEIVED,
+    payload: { id: location, longitude, latitude, metric, metricsData }
+  });
 }
 
 function* watchAppLoad() {
